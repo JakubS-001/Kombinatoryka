@@ -148,11 +148,13 @@ void build_full_A(int n1, int n2, const unsigned char* B, double* A) {
 
 // Backtracking search
 int found = 0;
+// If stop_on_first == 1, search stops after first solution. If 0, collects all solutions.
+int stop_on_first = 1;
 // fixed_mask: if fixed_mask[idx]==1 then edge is fixed (must be present)
 void search_bt(int n1, int n2, unsigned char* B, const unsigned char* fixed_mask,
                int idx, int total_edges_set, int remaining, double target_sum_sq,
                double* target_eigs, int target_n, double eps) {
-    if (found) return;
+    if (stop_on_first && found) return;
     if (idx == n1*n2) {
         // complete
         int n = n1 + n2;
@@ -167,12 +169,19 @@ void search_bt(int n1, int n2, unsigned char* B, const unsigned char* fixed_mask
         qsort(target_copy,n,sizeof(double),compare_doubles);
         int ok = 1;
         for (int i=0;i<n;i++) {
-            if (fabs(eig[i]-target_copy[i]) > eps) { ok = 0; break; }
+            double a = eig[i];
+            double b = target_copy[i];
+            double tol = eps * fmax(1.0, fmax(fabs(a), fabs(b)));
+            if (fabs(a - b) > tol) { ok = 0; break; }
         }
         if (ok) {
             printf("FOUND graph with %d x %d bipartition. Edges:\n", n1, n2);
             for (int i=0;i<n1;i++) for (int j=0;j<n2;j++) if (B[i*n2+j]) printf("%d %d\n", i, j);
             found = 1;
+            if (stop_on_first) {
+                free(A); free(eig); free(target_copy);
+                return;
+            }
         }
         free(A); free(eig);
         free(target_copy);
@@ -191,20 +200,23 @@ void search_bt(int n1, int n2, unsigned char* B, const unsigned char* fixed_mask
 
     int rem_after = remaining - 1;
     if (fixed_mask && fixed_mask[idx]) {
-        // forced to 1
+        // forced to 1 (do not pre-set B in main; set here once)
         B[idx] = 1;
         search_bt(n1,n2,B,fixed_mask,idx+1,total_edges_set+1,rem_after,target_sum_sq,target_eigs,target_n,eps);
-        // do not unset fixed (keep as is)
+        // undo for other branches when searching all solutions
+        B[idx] = 0;
+        if (stop_on_first && found) return;
         return;
     }
     // try 0
     B[idx] = 0;
     search_bt(n1,n2,B,fixed_mask,idx+1,total_edges_set,rem_after,target_sum_sq,target_eigs,target_n,eps);
-    if (found) return;
+    if (stop_on_first && found) return;
     // try 1
     B[idx] = 1;
     search_bt(n1,n2,B,fixed_mask,idx+1,total_edges_set+1,rem_after,target_sum_sq,target_eigs,target_n,eps);
     B[idx] = 0;
+    if (stop_on_first && found) return;
 }
 
 int main(int argc, char** argv) {
@@ -216,6 +228,9 @@ int main(int argc, char** argv) {
     const char* spectrum_path = argv[2];
     double eps = 1e-6;
     if (argc >= 4) eps = atof(argv[3]);
+    if (argc >= 5) {
+        if (strcmp(argv[4], "all") == 0) stop_on_first = 0;
+    }
 
     int n1=0,n2=0;
     unsigned char *fixed_mask = NULL;
@@ -236,13 +251,11 @@ int main(int argc, char** argv) {
     for (int i=0;i<n;i++) target_sum_sq += target[i]*target[i];
 
     unsigned char* B = calloc(n1*n2,1);
+    if (!B) { fprintf(stderr, "Memory allocation failed\n"); free(target); if (fixed_mask) free(fixed_mask); return 5; }
     found = 0;
-    // initialize B for fixed edges (they will be forced in search)
-    int fixed_count = 0;
-    if (fixed_mask) {
-        for (int i=0;i<n1*n2;i++) if (fixed_mask[i]) { B[i]=1; fixed_count++; }
-    }
-    search_bt(n1,n2,B,fixed_mask,0,fixed_count,n1*n2 - 0,target_sum_sq,target,target_n,eps);
+    // Do NOT pre-set B for fixed edges here to avoid double-counting.
+    // search_bt will set B[idx]=1 when encountering fixed_mask[idx].
+    search_bt(n1,n2,B,fixed_mask,0,0,n1*n2,target_sum_sq,target,target_n,eps);
     if (!found) {
         printf("No matching bipartite graph found (for given sizes and spectrum)\n");
     }
