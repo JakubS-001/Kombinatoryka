@@ -129,7 +129,9 @@ void jacobi_eigenvalues(double* a, int n, double* eig) {
 int compare_doubles(const void* a, const void* b) {
     double da = *(const double*)a;
     double db = *(const double*)b;
-    if (da < db) return -1; if (da > db) return 1; return 0;
+    if (da < db) return -1; 
+    if (da > db) return 1; 
+    return 0;
 }
 
 // Build full adjacency matrix A from B (n1 x n2) into A (n x n)

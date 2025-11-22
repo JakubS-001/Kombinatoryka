@@ -13,8 +13,17 @@ fi
 n1="$1"; shift
 n2="$1"; shift
 
-GENBG=$(command -v genbg || true)
-SHOWG=$(command -v showg || true)
+# Prefer nauty binaries from repository local copy: Generator/../thirdparty/nauty2_8_9/
+NAUTY_DIR="$(dirname "$0")/../thirdparty/nauty2_8_9"
+GENBG="$NAUTY_DIR/genbg"
+SHOWG="$NAUTY_DIR/showg"
+# Fallback to PATH if local binaries not present
+if [ ! -x "$GENBG" ]; then
+  GENBG=$(command -v genbg || true)
+fi
+if [ ! -x "$SHOWG" ]; then
+  SHOWG=$(command -v showg || true)
+fi
 GRAPH_TO_JSON="$(dirname "$0")/graph_to_json"
 
 if [ -z "$GENBG" ] || [ -z "$SHOWG" ]; then
